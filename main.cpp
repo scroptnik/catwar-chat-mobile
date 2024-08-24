@@ -11,6 +11,9 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <regex>
+#include "xpath_static.h"
+#include "xpath_processor.h"
 
 namespace beast = boost::beast;
 namespace http = beast::http;
@@ -39,6 +42,16 @@ int json_parse(const std::string& json, const std::string& key) {
     return value;
 }
 
+std::string get_token_cookie(const std::string& cookies)
+{
+    std::regex rgx("token=.*?;");
+    std::smatch match;
+
+    if (std::regex_search(cookies.begin(), cookies.end(), match, rgx))
+    {
+        return match[0]; //token
+    }    
+}
 
 int main(int argc, char** argv)
 {
@@ -77,9 +90,9 @@ int main(int argc, char** argv)
 
         beast::get_lowest_layer(stream).connect(results);
 
-
         stream.handshake(ssl::stream_base::client);
 
+        std::cout << "Send login request.\n";
         http::request<http::string_body> req{ http::verb::post, target, version };
         req.set(http::field::host, host);
         req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
@@ -95,8 +108,7 @@ int main(int argc, char** argv)
 
         http::read(stream, buffer, res);
 
-        std::cout << res << std::endl;
-        std::cout << "\n\n" << std::endl;
+      //  std::cout << "\n\n" << std::endl;
 
         std::stringstream ss;
         ss << beast::make_printable(res.body().data());
@@ -119,31 +131,45 @@ int main(int argc, char** argv)
             return 1;
         }
 
-        std::cout << "Login successful." << std::endl;
+        if (res.result_int() == 200) {
+            std::cout << "Login successful." << std::endl; 
+        }
+        else {
+            std::cout << "Login error. HTTP code: " << res.result_int() << std::endl;
+        }
 
-       // std::cout << "\ncookies:\n";
+        std::cout << "\nGet cookies.\n";
         std::string cookies;
         for (const auto& field : res.base()) {
             if (field.name() == http::field::set_cookie) {
                 cookies += std::string(field.value()) + "; ";
             }
         }
+        std::string token = get_token_cookie(cookies);
       //  std::cout << cookies << std::endl << std::endl;
+        std::cout << "\nSend get chat request.\n";
+        for (int i = 0; i < 10; i++) {
+            http::request<http::string_body> req_get{ http::verb::get, "/chat", version };
+            req_get.set(http::field::host, host);
+            req_get.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+            req_get.set(http::field::cookie, token);
 
-        http::request<http::string_body> req_get{ http::verb::get, "/", version };
-        req_get.set(http::field::host, host);
-        req_get.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-        req_get.set(http::field::cookie, "token=5e66bd157ed6e99edfa96b1205ce76efb7f2f2d3;");
+            http::write(stream, req_get);
 
-        http::write(stream, req_get);
+            beast::flat_buffer buf;
 
-        beast::flat_buffer buf;
+            http::response<http::string_body> response;
 
-        http::response<http::dynamic_body> response;
+            http::read(stream, buffer, response);
 
-        http::read(stream, buffer, response);
+            if (response.result_int() == 200) {
+                std::cout << "Chat get page successful." << std::endl;
+            }
+            else {
+                std::cout << "Chat get page error. HTTP code: " << response.result_int() << std::endl;
+            }
 
-        //std::cout << response << std::endl;
+        }
 
         beast::error_code ec;
         stream.shutdown(ec);
