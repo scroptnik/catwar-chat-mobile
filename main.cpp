@@ -25,29 +25,6 @@ using tcp = net::ip::tcp;
 
 #pragma region funcs
 
-void do_read(ws_) {
-    ws_.async_read(buffer_,
-        beast::bind_front_handler(&WebSocketClient::on_read, this));
-}
-
-void on_read(beast::error_code ec, std::size_t bytes_transferred) {
-    boost::ignore_unused(bytes_transferred);
-
-    if (ec) {
-        std::cerr << "Read error: " << ec.message() << std::endl;
-        return;
-    }
-
-    // Обрабатываем полученные данные
-    std::cout << "Received: " << beast::make_printable(buffer_.data()) << std::endl;
-
-    // Очищаем буфер после обработки данных
-    buffer_.consume(buffer_.size());
-
-    // Снова начинаем асинхронное чтение
-    do_read();
-}
-
 int json_parse(const std::string& json, const std::string& key) {
     int value = 0;
     std::string keySearch = "\"" + key + "\":";
